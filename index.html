@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Image Analyzer</title>
+    <!-- Tailwind CSS for modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for better typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Custom styles to complement Tailwind */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* Dark background */
+            color: #d1d5db;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        /* Style for the file input button */
+        input[type="file"]::file-selector-button {
+            font-weight: 500;
+            background-color: #374151;
+            color: #d1d5db;
+            border: 1px solid #4b5563;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        input[type="file"]::file-selector-button:hover {
+            background-color: #4b5563;
+        }
+        /* Custom scrollbar for results */
+        #results-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        #results-container::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+        #results-container::-webkit-scrollbar-thumb {
+            background-color: #4b5563;
+            border-radius: 10px;
+            border: 2px solid #1f2937;
+        }
+        /* Canvas for drawing bounding boxes */
+        #bbox-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none; /* Allows clicks to go through to the image if needed */
+        }
+        /* Footer styling */
+        footer {
+            margin-top: auto;
+            background-color: #1f2937;
+        }
+        /* Pulse animation for loading */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .animate-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        /* Gender indicator styling */
+        .gender-indicator {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        .male { background-color: #3b82f6; }
+        .female { background-color: #ec4899; }
+        .other { background-color: #8b5cf6; }
+        /* Emotion indicator styling */
+        .emotion-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 4px;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 flex-grow">
+        <!-- Header Section -->
+        <header class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-white tracking-tight">Advanced Image Analyzer</h1>
+            <p class="mt-2 text-lg text-gray-400">Upload an image to detect objects, faces, text, and more.</p>
+        </header>
+
+        <!-- Upload and Control Section -->
+        <div class="bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-lg mb-8 max-w-2xl mx-auto">
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <input type="file" id="imageUpload" accept="image/*" class="flex-grow text-gray-300 text-sm rounded-lg border border-gray-600 cursor-pointer bg-gray-700 focus:outline-none">
+                <button onclick="analyzeImage()" id="analyzeBtn" class="w-full sm:w-auto flex items-center justify-center px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500 transition-all">
+                    <svg id="analyze-icon" class="w-5 h-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                    </svg>
+                    <svg id="loading-spinner" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span id="button-text">Analyze Image</span>
+                </button>
+            </div>
+            <div id="message-area" class="text-center text-yellow-400 mt-4 text-sm"></div>
+        </div>
+
+        <!-- Results Display Section -->
+        <div id="results-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-8 hidden">
+            <!-- Image Preview Column -->
+            <!-- Image Preview Column -->
+<div class="bg-gray-800 border border-gray-700 rounded-lg p-4 shadow-lg">
+    <h2 class="text-xl font-semibold text-white mb-4">Image Preview</h2>
+    <div id="image-container" class="relative w-full">
+        <img id="preview" src="" alt="Image Preview" class="rounded-md w-full h-auto object-contain max-h-[60vh]">
+        <canvas id="bbox-canvas"></canvas>
+    </div>
+    <!-- Face Details Section Below Image -->
+    <div id="face-details-container" class="bg-gray-900/50 rounded-lg p-4 border border-gray-700 mt-2">
+        <!-- Dynamic face details will be inserted here -->
+    </div>
+</div>
+
+            <!-- Analysis Details Column -->
+            <div class="bg-gray-800 border border-gray-700 rounded-lg p-4 shadow-lg flex flex-col min-h-[300px]">
+                <h2 class="text-xl font-semibold text-white mb-4">Analysis Summary</h2>
+                <div id="results-container" class="space-y-6 overflow-y-auto flex-grow pr-2">
+                    <!-- Dynamic content will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer Section -->
+    <footer class="py-4 border-t border-gray-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-gray-400 text-sm">
+            <p>Developed with <i class="fas fa-heart text-red-500"></i> by Datta 
+                <a href="https://github.com/gowthusaidatta" target="_blank" class="text-indigo-400 hover:text-indigo-300 ml-2">
+                    <i class="fab fa-github"></i> GitHub
+                </a>
+            </p>
+            <p class="mt-1">© 2023 Advanced Image Analyzer. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // API endpoint for the backend service
+        const apiUrl = "https://jbxjmo9fc4.execute-api.us-east-1.amazonaws.com/prod/upload";
+
+        // UI Element References
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const buttonText = document.getElementById('button-text');
+        const analyzeIcon = document.getElementById('analyze-icon');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const messageArea = document.getElementById('message-area');
+        const resultsGrid = document.getElementById('results-grid');
+        const resultsContainer = document.getElementById('results-container');
+        const faceDetailsContainer = document.getElementById('face-details-container');
+        const previewImg = document.getElementById('preview');
+        const canvas = document.getElementById('bbox-canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Store last API response for redrawing on resize
+        let lastApiData = null;
+
+        /**
+         * Main function to handle the image analysis process.
+         */
+        async function analyzeImage() {
+            const fileInput = document.getElementById('imageUpload');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                showMessage("Please select an image file first.", "error");
+                return;
+            }
+
+            // --- UI state update: Start loading ---
+            setLoadingState(true);
+            clearPreviousResults();
+            
+            // Show image preview
+            previewImg.src = URL.createObjectURL(file);
+            resultsGrid.classList.remove('hidden');
+
+            // Wait for the image to load to get its dimensions for the canvas
+            previewImg.onload = async () => {
+                try {
+                    const base64Image = await toBase64(file);
+                    const response = await fetch(apiUrl, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ image: base64Image })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`API error: ${response.statusText}`);
+                    }
+
+                    const data = await response.json();
+                    lastApiData = data; // Store for potential redraw
+                    renderAllResults(data);
+
+                } catch (error) {
+                    console.error("Analysis failed:", error);
+                    showMessage("❌ Analysis failed. Please check the console or try another image.", "error");
+                    resultsContainer.innerHTML = `<div class="text-red-400 p-4 rounded-lg bg-gray-900/50">Error: ${error.message}</div>`;
+                } finally {
+                    // --- UI state update: Stop loading ---
+                    setLoadingState(false);
+                }
+            };
+        }
+
+        /**
+         * Renders all analysis results into the UI.
+         * @param {object} data - The full response data from the Rekognition API.
+         */
+        function renderAllResults(data) {
+            // Clear canvas and results before drawing new ones
+            clearPreviousResults();
+            
+            let contentRendered = false;
+            let summaryItems = [];
+
+            if (data.Labels && data.Labels.length > 0) {
+                const labelsContent = renderLabels(data.Labels);
+                resultsContainer.appendChild(createSection('Object & Scene Detection', labelsContent.content));
+                drawBoundingBoxes(data.Labels, '#22c55e'); // Green for labels
+                contentRendered = true;
+                summaryItems.push(`Found ${data.Labels.length} objects/scenes`);
+            }
+            if (data.Faces && data.Faces.length > 0) {
+                const facesContent = renderFaces(data.Faces);
+                resultsContainer.appendChild(createSection('Face Analysis', facesContent.content));
+                drawBoundingBoxes(data.Faces, '#3b82f6'); // Blue for faces
+                contentRendered = true;
+                summaryItems.push(`Detected ${data.Faces.length} faces`);
+                
+                // Render face details below the image
+                renderFaceDetails(data.Faces);
+            }
+            if (data.TextDetections && data.TextDetections.length > 0) {
+                const textContent = renderText(data.TextDetections);
+                resultsContainer.appendChild(createSection('Text Detection', textContent.content));
+                drawBoundingBoxes(data.TextDetections, '#f97316'); // Orange for text
+                contentRendered = true;
+                summaryItems.push(`Found ${textContent.lineCount} text lines`);
+            }
+            if (data.ModerationLabels && data.ModerationLabels.length > 0) {
+                const moderationContent = renderModeration(data.ModerationLabels);
+                resultsContainer.appendChild(createSection('Content Moderation', moderationContent, 'border-red-500'));
+                contentRendered = true;
+                summaryItems.push(`⚠️ ${data.ModerationLabels.length} moderation alerts`);
+            }
+
+            // Add summary at the top
+            if (contentRendered) {
+                const summaryEl = document.createElement('div');
+                summaryEl.className = 'bg-gray-900/50 rounded-lg p-4 border-l-4 border-indigo-500 mb-6';
+                summaryEl.innerHTML = `
+                    <h3 class="text-lg font-semibold text-gray-200 mb-2">Quick Summary</h3>
+                    <div class="flex flex-wrap gap-2">
+                        ${summaryItems.map(item => `<span class="px-3 py-1 bg-gray-700 rounded-full text-sm">${item}</span>`).join('')}
+                    </div>
+                `;
+                resultsContainer.insertBefore(summaryEl, resultsContainer.firstChild);
+            } else {
+                showMessage("No recognizable content was detected in the image.", "info");
+                resultsContainer.innerHTML = `
+                    <div class="text-center py-8 text-gray-400">
+                        <i class="fas fa-image fa-3x mb-4 opacity-50"></i>
+                        <p class="text-lg">No detectable content found</p>
+                        <p class="text-sm mt-2">Try a different image with clearer objects, faces, or text.</p>
+                    </div>
+                `;
+            }
+        }
+
+        /**
+         * Renders face details below the image preview
+         * @param {Array} faces - Array of face objects
+         */
+        function renderFaceDetails(faces) {
+            faceDetailsContainer.innerHTML = ''; // Clear previous content
+            
+            if (faces.length === 0) return;
+            
+            // For multiple faces, show a summary
+            if (faces.length > 1) {
+                const genderCount = { Male: 0, Female: 0 };
+                const ageRanges = [];
+                let smilingCount = 0;
+                let eyesOpenCount = 0;
+                
+                faces.forEach(face => {
+                    if (face.Gender?.Value) genderCount[face.Gender.Value]++;
+                    if (face.AgeRange) ageRanges.push(`${face.AgeRange.Low}-${face.AgeRange.High}`);
+                    if (face.Smile?.Value) smilingCount++;
+                    if (face.EyesOpen?.Value) eyesOpenCount++;
+                });
+                
+                const avgAge = ageRanges.length > 0 ? 
+                    Math.round(ageRanges.map(a => {
+                        const [low, high] = a.split('-').map(Number);
+                        return (low + high) / 2;
+                    }).reduce((a, b) => a + b, 0) / ageRanges.length) : 'N/A';
+                
+                faceDetailsContainer.innerHTML = `
+                    <h3 class="font-semibold text-white mb-2 flex items-center">
+                        <i class="fas fa-users mr-2"></i> ${faces.length} Faces Detected
+                    </h3>
+                    <div class="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                            <div class="text-gray-400">Gender</div>
+                            <div class="flex items-center mt-1">
+                                ${genderCount.Male > 0 ? `<span class="gender-indicator male mr-2"></span>${genderCount.Male} Male` : ''}
+                                ${genderCount.Female > 0 ? `<span class="gender-indicator female ml-3 mr-2"></span>${genderCount.Female} Female` : ''}
+                            </div>
+                        </div>
+                        <div>
+                            <div class="text-gray-400">Avg. Age</div>
+                            <div class="text-white mt-1">${avgAge} years</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-400">Smiling</div>
+                            <div class="text-white mt-1">${smilingCount} of ${faces.length}</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-400">Eyes Open</div>
+                            <div class="text-white mt-1">${eyesOpenCount} of ${faces.length}</div>
+                        </div>
+                    </div>
+                `;
+            } 
+            // For single face, show detailed information
+            else {
+                const face = faces[0];
+                const gender = face.Gender?.Value || 'Unknown';
+                const genderClass = gender.toLowerCase() === 'male' ? 'male' : 
+                                  gender.toLowerCase() === 'female' ? 'female' : 'other';
+                const ageRange = face.AgeRange ? `${face.AgeRange.Low}-${face.AgeRange.High}` : 'N/A';
+                const beard = face.Beard?.Value ? 'Yes' : 'No';
+                const mustache = face.Mustache?.Value ? 'Yes' : 'No';
+                const sunglasses = face.Sunglasses?.Value ? 'Yes' : 'No';
+                const smile = face.Smile?.Value ? 'Yes' : 'No';
+                const eyesOpen = face.EyesOpen?.Value ? 'Yes' : 'No';
+                
+                // Get hair color (if available)
+                let hairColor = 'Not detected';
+                if (face.Hair?.HairColor) {
+                    const primaryHairColor = face.Hair.HairColor.reduce((prev, current) => 
+                        (prev.Confidence > current.Confidence) ? prev : current
+                    );
+                    hairColor = `${primaryHairColor.Value} (${primaryHairColor.Confidence.toFixed(1)}%)`;
+                }
+                
+                // Get primary emotion
+                let primaryEmotion = 'Neutral';
+                if (face.Emotions && face.Emotions.length > 0) {
+                    primaryEmotion = face.Emotions.reduce((prev, current) => 
+                        (prev.Confidence > current.Confidence) ? prev : current
+                    ).Type;
+                }
+                
+                // Get all emotions with confidence > 30%
+                const significantEmotions = face.Emotions
+                    ?.filter(e => e.Confidence > 30)
+                    .sort((a, b) => b.Confidence - a.Confidence)
+                    .map(e => `${e.Type} (${e.Confidence.toFixed(1)}%)`) || [];
+                
+                faceDetailsContainer.innerHTML = `
+                    <h3 class="font-semibold text-white mb-2 flex items-center">
+                        <span class="gender-indicator ${genderClass} mr-2"></span>
+                        ${gender} ${ageRange} years
+                    </h3>
+                    <div class="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                            <div class="text-gray-400">Hair Color</div>
+                            <div class="text-white mt-1">${hairColor}</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-400">Facial Hair</div>
+                            <div class="text-white mt-1">${beard} beard, ${mustache} mustache</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-400">Accessories</div>
+                            <div class="text-white mt-1">${sunglasses} sunglasses</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-400">Eye Status</div>
+                            <div class="text-white mt-1">${eyesOpen ? 'Open' : 'Closed'}</div>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="text-gray-400">Primary Emotion</div>
+                        <div class="text-white mt-1 capitalize">${primaryEmotion.toLowerCase()}</div>
+                    </div>
+                    ${significantEmotions.length > 0 ? `
+                    <div class="mt-3">
+                        <div class="text-gray-400">Emotions Detected</div>
+                        <div class="flex flex-wrap gap-2 mt-2">
+                            ${significantEmotions.map(emotion => `
+                                <span class="px-2 py-1 bg-gray-800 rounded-full text-xs">${emotion}</span>
+                            `).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
+                `;
+            }
+        }
+
+        /**
+         * Renders detected labels (objects/scenes).
+         * @param {Array} labels - Array of label objects.
+         * @returns {Object} - An object containing content and count.
+         */
+        function renderLabels(labels) {
+            const fragment = document.createDocumentFragment();
+            // Group by confidence levels for summary
+            const highConfidence = labels.filter(l => l.Confidence > 90).length;
+            const mediumConfidence = labels.filter(l => l.Confidence > 70 && l.Confidence <= 90).length;
+            const lowConfidence = labels.filter(l => l.Confidence <= 70).length;
+            
+            // Sort by confidence (highest first)
+            labels.sort((a, b) => b.Confidence - a.Confidence);
+            
+            // Take top 10 most confident labels
+            const topLabels = labels.slice(0, 10);
+            
+            topLabels.forEach(label => {
+                const parentCategories = label.Parents?.map(p => p.Name).join(', ') || 'General';
+                const item = createResultItem(
+                    label.Name,
+                    `Categories: ${parentCategories}`,
+                    createConfidenceBar(label.Confidence),
+                    `Confidence: ${label.Confidence.toFixed(1)}%`
+                );
+                fragment.appendChild(item);
+            });
+            
+            return {
+                content: fragment,
+                highConfidence,
+                mediumConfidence,
+                lowConfidence
+            };
+        }
+
+        /**
+         * Renders detected faces and their attributes.
+         * @param {Array} faces - Array of face detail objects.
+         * @returns {Object} - An object containing content and count.
+         */
+        function renderFaces(faces) {
+            const fragment = document.createDocumentFragment();
+            
+            // Count face attributes for summary
+            let smilingCount = 0;
+            let eyesOpenCount = 0;
+            const ageRanges = [];
+            const genders = { Male: 0, Female: 0 };
+            
+            faces.forEach((face, index) => {
+                // Update summary counts
+                if (face.Smile?.Value) smilingCount++;
+                if (face.EyesOpen?.Value) eyesOpenCount++;
+                ageRanges.push(`${face.AgeRange?.Low}-${face.AgeRange?.High}`);
+                if (face.Gender?.Value) genders[face.Gender.Value]++;
+                
+                // Get top 2 emotions
+                const emotions = face.Emotions
+                    ?.sort((a, b) => b.Confidence - a.Confidence)
+                    .slice(0, 2)
+                    .map(e => `${e.Type} (${e.Confidence.toFixed(1)}%)`)
+                    .join(', ') || 'No emotions detected';
+
+                // Get hair color if available
+                let hairColor = '';
+                if (face.Hair?.HairColor) {
+                    const primaryHairColor = face.Hair.HairColor.reduce((prev, current) => 
+                        (prev.Confidence > current.Confidence) ? prev : current
+                    );
+                    hairColor = `Hair: ${primaryHairColor.Value} | `;
+                }
+
+                const attributes = [
+                    face.AgeRange ? `Age: ${face.AgeRange.Low}-${face.AgeRange.High}` : '',
+                    face.Gender ? `Gender: ${face.Gender.Value}` : '',
+                    face.Smile ? `Smile: ${face.Smile.Value ? 'Yes' : 'No'}` : '',
+                    face.EyesOpen ? `Eyes: ${face.EyesOpen.Value ? 'Open' : 'Closed'}` : '',
+                    face.Beard ? `Beard: ${face.Beard.Value ? 'Yes' : 'No'}` : '',
+                    face.Mustache ? `Mustache: ${face.Mustache.Value ? 'Yes' : 'No'}` : '',
+                    face.Sunglasses ? `Sunglasses: ${face.Sunglasses.Value ? 'Yes' : 'No'}` : ''
+                ].filter(Boolean).join(' | ');
+
+                const item = createResultItem(
+                    `Face #${index + 1}`,
+                    `${hairColor}${attributes}`,
+                    createConfidenceBar(face.Confidence),
+                    emotions
+                );
+                fragment.appendChild(item);
+            });
+            
+            return {
+                content: fragment,
+                smilingCount,
+                eyesOpenCount,
+                ageRanges,
+                genders
+            };
+        }
+        
+        /**
+         * Renders detected text.
+         * @param {Array} texts - Array of text detection objects.
+         * @returns {Object} - An object containing content and line count.
+         */
+        function renderText(texts) {
+            const fragment = document.createDocumentFragment();
+            // Filter for line-level text (not individual words)
+            const lineTexts = texts.filter(t => t.Type === 'LINE');
+            const detectedText = lineTexts.map(t => t.DetectedText).join(' ');
+            
+            if (lineTexts.length > 0) {
+                // Show full text in one box
+                const fullTextItem = createResultItem(
+                    "Detected Text",
+                    `${lineTexts.length} lines found`,
+                    null,
+                    `<div class="bg-gray-800 p-3 rounded mt-2 text-sm">"${detectedText}"</div>`
+                );
+                fragment.appendChild(fullTextItem);
+                
+                // Show confidence for each line (collapsible)
+                const detailsEl = document.createElement('details');
+                detailsEl.className = 'mt-3 bg-gray-800/50 rounded-lg overflow-hidden';
+                detailsEl.innerHTML = `
+                    <summary class="px-3 py-2 cursor-pointer text-sm font-medium">Show individual line confidence</summary>
+                    <div class="px-3 py-2 border-t border-gray-700 space-y-2">
+                        ${lineTexts.map(text => `
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="truncate max-w-xs">"${text.DetectedText}"</span>
+                                <span class="ml-2 font-mono">${text.Confidence.toFixed(1)}%</span>
+                            </div>
+                            ${createConfidenceBar(text.Confidence).trim()}
+                        `).join('')}
+                    </div>
+                `;
+                fragment.appendChild(detailsEl);
+            }
+            
+            return {
+                content: fragment,
+                lineCount: lineTexts.length,
+                detectedText
+            };
+        }
+
+        /**
+         * Renders content moderation labels.
+         * @param {Array} labels - Array of moderation label objects.
+         * @returns {DocumentFragment} - A fragment containing the rendered HTML.
+         */
+        function renderModeration(labels) {
+            const fragment = document.createDocumentFragment();
+            
+            // Sort by confidence (highest first)
+            labels.sort((a, b) => b.Confidence - a.Confidence);
+            
+            labels.forEach(label => {
+                const item = createResultItem(
+                    label.Name,
+                    `Category: ${label.ParentName || 'N/A'}`,
+                    createConfidenceBar(label.Confidence)
+                );
+                item.classList.add('border-l-red-500'); // Add a red accent for moderation issues
+                fragment.appendChild(item);
+            });
+            
+            return fragment;
+        }
+
+        /**
+         * Draws bounding boxes on the canvas overlay.
+         * @param {Array} items - Array of items with BoundingBox or Geometry properties.
+         * @param {string} color - The color for the bounding box stroke.
+         */
+        function drawBoundingBoxes(items, color) {
+            const imgWidth = previewImg.naturalWidth;
+            const imgHeight = previewImg.naturalHeight;
+            const displayWidth = previewImg.clientWidth;
+            const displayHeight = previewImg.clientHeight;
+            
+            // Set canvas dimensions to match the displayed image size
+            canvas.width = displayWidth;
+            canvas.height = displayHeight;
+            
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = color;
+            ctx.font = 'bold 12px Inter';
+            ctx.fillStyle = color;
+
+            items.forEach(item => {
+                // Rekognition provides two different structures for bounding boxes
+                const box = item.BoundingBox || (item.Geometry && item.Geometry.BoundingBox);
+                if (!box) return;
+
+                const left = box.Left * displayWidth;
+                const top = box.Top * displayHeight;
+                const width = box.Width * displayWidth;
+                const height = box.Height * displayHeight;
+
+                // Draw the box
+                ctx.beginPath();
+                ctx.rect(left, top, width, height);
+                ctx.stroke();
+
+                // Draw the label text above the box
+                const label = item.Name || item.DetectedText || (item.Gender ? `Face (${item.Gender.Value})` : 'Object');
+                const confidence = item.Confidence ? `${item.Confidence.toFixed(1)}%` : '';
+                const text = `${label} ${confidence}`;
+                
+                // Measure text and draw background
+                const textWidth = ctx.measureText(text).width;
+                ctx.fillRect(left - 1, top - 18, textWidth + 8, 18);
+                
+                // Draw text
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(text, left + 3, top - 3);
+                ctx.fillStyle = color; // Reset fill style for next label background
+            });
+        }
+
+        // --- UTILITY AND HELPER FUNCTIONS ---
+
+        function createSection(title, contentFragment, borderColor = 'border-indigo-500') {
+            const sectionEl = document.createElement('div');
+            sectionEl.className = `bg-gray-900/50 rounded-lg p-4 border-l-4 ${borderColor}`;
+            sectionEl.innerHTML = `<h3 class="text-lg font-semibold text-gray-200 mb-3">${title}</h3>`;
+            const contentWrapper = document.createElement('div');
+            contentWrapper.className = 'space-y-3';
+            contentWrapper.appendChild(contentFragment);
+            sectionEl.appendChild(contentWrapper);
+            return sectionEl;
+        }
+
+        function createResultItem(title, subtitle, confidenceBar, details = '') {
+            const itemEl = document.createElement('div');
+            itemEl.className = 'bg-gray-700/50 p-3 rounded-md border border-gray-600';
+            let html = `<div class="font-semibold text-gray-100">${title}</div>`;
+            if (subtitle) html += `<div class="text-xs text-gray-400">${subtitle}</div>`;
+            if (confidenceBar) html += confidenceBar;
+            if (details) html += `<div class="text-sm text-gray-300 mt-2">${details}</div>`;
+            itemEl.innerHTML = html;
+            return itemEl;
+        }
+
+        function createConfidenceBar(confidence) {
+            const percentage = confidence.toFixed(2);
+            const colorClass = confidence > 90 ? 'bg-green-500' : confidence > 70 ? 'bg-indigo-500' : 'bg-yellow-500';
+            return `
+                <div class="w-full bg-gray-600 rounded-full h-2.5 mt-2">
+                    <div class="${colorClass} h-2.5 rounded-full" style="width: ${percentage}%"></div>
+                </div>
+                <div class="text-xs text-gray-400 text-right mt-1">${percentage}% confidence</div>
+            `;
+        }
+
+        function setLoadingState(isLoading) {
+            if (isLoading) {
+                analyzeBtn.disabled = true;
+                buttonText.textContent = 'Analyzing...';
+                analyzeIcon.classList.add('hidden');
+                loadingSpinner.classList.remove('hidden');
+                messageArea.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i> Processing image...';
+            } else {
+                analyzeBtn.disabled = false;
+                buttonText.textContent = 'Analyze Image';
+                analyzeIcon.classList.remove('hidden');
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+
+        function showMessage(msg, type = 'info') {
+            messageArea.textContent = msg;
+            messageArea.className = `text-center mt-4 text-sm ${type === 'error' ? 'text-red-400' : type === 'info' ? 'text-blue-400' : 'text-yellow-400'}`;
+            
+            if (type === 'error') {
+                messageArea.innerHTML = `<i class="fas fa-exclamation-circle mr-2"></i>${msg}`;
+            } else if (type === 'info') {
+                messageArea.innerHTML = `<i class="fas fa-info-circle mr-2"></i>${msg}`;
+            }
+        }
+
+        function clearPreviousResults() {
+            messageArea.innerHTML = '';
+            resultsContainer.innerHTML = '';
+            faceDetailsContainer.innerHTML = '';
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function toBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        // Redraw bounding boxes on window resize
+        window.addEventListener('resize', () => {
+            if (previewImg.src && lastApiData) {
+                // Debounce to prevent excessive redraws
+                clearTimeout(window.resizeTimer);
+                window.resizeTimer = setTimeout(() => {
+                    renderAllResults(lastApiData);
+                }, 200);
+            }
+        });
+
+        // Add a nice hover effect to file input
+        document.getElementById('imageUpload').addEventListener('mouseenter', function() {
+            this.classList.add('ring-2', 'ring-indigo-500');
+        });
+        document.getElementById('imageUpload').addEventListener('mouseleave', function() {
+            this.classList.remove('ring-2', 'ring-indigo-500');
+        });
+    </script>
+</body>
+</html>
